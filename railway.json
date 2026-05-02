@@ -1,4 +1,13 @@
 {
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "streamlit run dashboard.py --server.port=8080 --server.address=0.0.0.0 & python analytics_service.py && wait",
+    "healthcheckPath": "/_stcore/health",
+    "numReplicas": 1
+  },
   "crons": [
     {
       "schedule": "0 9 * * *",
