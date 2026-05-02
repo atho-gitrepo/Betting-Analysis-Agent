@@ -781,7 +781,20 @@ class BettingDashboard:
         self.render_risk_metrics()
         self.render_detailed_table()
 
-# Run the dashboard
 if __name__ == "__main__":
+    import os
+    import sys
+    
+    # Get port from environment (Railway provides PORT)
+    port = os.getenv('PORT', '8501')
+    
+    # Override sys.argv for streamlit
+    sys.argv = [
+        "streamlit", "run", "dashboard.py",
+        f"--server.port={port}",
+        "--server.address=0.0.0.0",
+        "--server.headless=true"
+    ]
+    
     dashboard = BettingDashboard()
     dashboard.run()
