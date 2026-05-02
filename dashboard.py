@@ -67,6 +67,9 @@ st.markdown("""
         border-radius: 5px;
         border-left: 4px solid #dc3545;
     }
+    .sequence-win { background-color: #90EE90; color: #000; padding: 4px 8px; border-radius: 4px; text-align: center; }
+    .sequence-loss { background-color: #FFB6C1; color: #000; padding: 4px 8px; border-radius: 4px; text-align: center; }
+    .sequence-active { background-color: #FFD700; color: #000; padding: 4px 8px; border-radius: 4px; text-align: center; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -334,75 +337,157 @@ class BettingDashboard:
             fig.update_layout(height=500, template='plotly_dark')
             st.plotly_chart(fig, use_container_width=True)
     
-    def render_temporal_patterns(self):
-        st.subheader("⏰ Temporal Patterns")
+    def render_sequence_win_loss_table(self):
+        """Display sequence win/loss table for last 7 days"""
+        st.subheader("📅 Last 7 Days - Sequence Win/Loss Tracker")
         
-        # Create all 3 tabs properly
-        tab1, tab2, tab3 = st.tabs(["Hourly Analysis", "Day of Week", "Monthly Trends"])
+        # Get last 7 days
+        today = datetime.now().date()
+        last_7_days = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
         
-        with tab1:
-            hourly_stats = self.df.groupby('hour').agg({
-                'outcome': lambda x: (x == 'win').mean() * 100,
-                'profit': 'sum',
-                'roi': 'mean'
-            }).round(2)
-            hourly_stats.columns = ['win_rate', 'profit', 'avg_roi']
+        # Create sequences for each day
+        sequence_data = []
+        for day in last_7_days:
+            day_bets = self.df[self.df['date'] == day]
             
-            fig = make_subplots(specs=[[{"secondary_y": True}]])
-            fig.add_trace(go.Bar(x=hourly_stats.index, y=hourly_stats['win_rate'],
-                               name='Win Rate %', marker_color='lightblue'), secondary_y=False)
-            fig.add_trace(go.Scatter(x=hourly_stats.index, y=hourly_stats['profit'],
-                                   name='Profit ($)', line=dict(color='orange', width=3)), secondary_y=True)
-            fig.update_layout(title="Win Rate & Profit by Hour",
-                            xaxis_title="Hour of Day (0-23)", height=450, template='plotly_dark')
-            fig.update_yaxes(title_text="Win Rate (%)", secondary_y=False)
-            fig.update_yaxes(title_text="Profit ($)", secondary_y=True)
-            st.plotly_chart(fig, use_container_width=True)
-            
-            best_hours = hourly_stats.nlargest(3, 'profit').index.tolist()
-            if best_hours:
-                st.info(f"💡 Best betting hours: {', '.join(map(str, best_hours))}:00")
+            if not day_bets.empty:
+                # Get sequences in order
+                sequences = day_bets.sort_values('resolved_at')[['match_sequence', 'outcome']].values.tolist()
+                
+                # Calculate day stats
+                total_bets = len(day_bets)
+                wins = len(day_bets[day_bets['outcome'] == 'win'])
+                win_rate = (wins / total_bets * 100) if total_bets > 0 else 0
+                day_profit = day_bets['profit'].sum()
+                
+                sequence_data.append({
+                    'date': day,
+                    'day_name': day.strftime('%A'),
+                    'total_bets': total_bets,
+                    'wins': wins,
+                    'losses': total_bets - wins,
+                    'win_rate': win_rate,
+                    'profit': day_profit,
+                    'sequences': sequences,
+                    'max_sequence': max([s[0] for s in sequences]) if sequences else 0
+                })
+            else:
+                sequence_data.append({
+                    'date': day,
+                    'day_name': day.strftime('%A'),
+                    'total_bets': 0,
+                    'wins': 0,
+                    'losses': 0,
+                    'win_rate': 0,
+                    'profit': 0,
+                    'sequences': [],
+                    'max_sequence': 0
+                })
         
-        with tab2:
-            days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-            day_stats = self.df.groupby('day_of_week').agg({
-                'outcome': lambda x: (x == 'win').mean() * 100,
-                'profit': 'sum',
-                'bets': 'count'
-            }).round(2)
-            day_stats.columns = ['win_rate', 'profit', 'bets']
-            day_stats = day_stats.reindex(days_order)
-            
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=day_stats.index, y=day_stats['win_rate'],
-                               name='Win Rate %', marker_color='lightgreen', yaxis='y'))
-            fig.add_trace(go.Scatter(x=day_stats.index, y=day_stats['profit'],
-                                   name='Profit $', marker_color='orange', yaxis='y2', mode='lines+markers'))
-            fig.update_layout(title="Performance by Day of Week", xaxis_title="Day",
-                            height=450, template='plotly_dark',
-                            yaxis=dict(title="Win Rate (%)"),
-                            yaxis2=dict(title="Profit ($)", overlaying='y', side='right'))
-            st.plotly_chart(fig, use_container_width=True)
+        # Display as a table with sequence visualization
+        for day_data in sequence_data:
+            with st.expander(f"📅 {day_data['date'].strftime('%Y-%m-%d')} - {day_data['day_name']}", expanded=(day_data['date'] == today)):
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Total Bets", day_data['total_bets'])
+                with col2:
+                    st.metric("Wins/Losses", f"{day_data['wins']}/{day_data['losses']}")
+                with col3:
+                    delta_color = "normal" if day_data['win_rate'] >= 50 else "inverse"
+                    st.metric("Win Rate", f"{day_data['win_rate']:.1f}%", delta_color=delta_color)
+                with col4:
+                    st.metric("Profit", f"${day_data['profit']:.2f}", 
+                             delta_color="normal" if day_data['profit'] > 0 else "inverse")
+                
+                # Display sequence timeline
+                if day_data['sequences']:
+                    st.markdown("**Sequence Timeline:**")
+                    
+                    # Create sequence visualization
+                    cols = st.columns(min(len(day_data['sequences']), 10))
+                    for idx, (seq_num, outcome) in enumerate(day_data['sequences']):
+                        if idx < len(cols):
+                            with cols[idx]:
+                                if outcome == 'win':
+                                    st.markdown(f'<div class="sequence-win">🏆 L{seq_num}<br>WIN</div>', unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f'<div class="sequence-loss">❌ L{seq_num}<br>LOSS</div>', unsafe_allow_html=True)
+                    
+                    # Show sequence pattern
+                    pattern = ''.join(['W' if o == 'win' else 'L' for _, o in day_data['sequences']])
+                    max_seq = day_data['max_sequence']
+                    st.caption(f"Pattern: {pattern} | Max Chase Level: {max_seq}")
+                    
+                    if max_seq >= 3 and day_data['profit'] < 0:
+                        st.warning(f"⚠️ High chase level ({max_seq}) with negative profit")
+                else:
+                    st.info("No bets placed on this day")
+                
+                st.markdown("---")
         
-        with tab3:
-            monthly_stats = self.df.groupby('month').agg({
-                'profit': 'sum',
-                'bets': 'count',
-                'outcome': lambda x: (x == 'win').mean() * 100
-            }).round(2)
-            monthly_stats.columns = ['profit', 'bets', 'win_rate']
-            
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=monthly_stats.index, y=monthly_stats['profit'],
-                               name='Monthly Profit', marker_color='coral'))
-            fig.add_trace(go.Scatter(x=monthly_stats.index, y=monthly_stats['win_rate'],
-                                   name='Win Rate', yaxis='y2', mode='lines+markers',
-                                   line=dict(color='cyan', width=3)))
-            fig.update_layout(title="Monthly Performance", xaxis_title="Month",
-                            height=450, template='plotly_dark',
-                            yaxis=dict(title="Profit ($)"),
-                            yaxis2=dict(title="Win Rate (%)", overlaying='y', side='right'))
-            st.plotly_chart(fig, use_container_width=True)
+        # Summary statistics for last 7 days
+        st.subheader("📊 7-Day Performance Summary")
+        
+        total_7day_bets = sum(d['total_bets'] for d in sequence_data)
+        total_7day_wins = sum(d['wins'] for d in sequence_data)
+        total_7day_profit = sum(d['profit'] for d in sequence_data)
+        avg_win_rate = (total_7day_wins / total_7day_bets * 100) if total_7day_bets > 0 else 0
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Bets (7 days)", total_7day_bets)
+        with col2:
+            st.metric("Total Wins", total_7day_wins)
+        with col3:
+            st.metric("Avg Win Rate", f"{avg_win_rate:.1f}%")
+        with col4:
+            st.metric("Total Profit (7 days)", f"${total_7day_profit:.2f}",
+                     delta_color="normal" if total_7day_profit > 0 else "inverse")
+        
+        # Weekly trend chart
+        weekly_df = pd.DataFrame([{
+            'date': d['date'],
+            'profit': d['profit'],
+            'win_rate': d['win_rate'],
+            'bets': d['total_bets']
+        } for d in sequence_data])
+        
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        fig.add_trace(go.Bar(x=weekly_df['date'], y=weekly_df['profit'],
+                            name='Daily Profit', marker_color=['green' if x > 0 else 'red' for x in weekly_df['profit']]),
+                     secondary_y=False)
+        
+        fig.add_trace(go.Scatter(x=weekly_df['date'], y=weekly_df['win_rate'],
+                                name='Win Rate %', mode='lines+markers',
+                                line=dict(color='cyan', width=3)),
+                     secondary_y=True)
+        
+        fig.update_layout(title="Last 7 Days: Profit vs Win Rate",
+                         xaxis_title="Date", height=400, template='plotly_dark')
+        fig.update_yaxes(title_text="Profit ($)", secondary_y=False)
+        fig.update_yaxes(title_text="Win Rate (%)", secondary_y=True, range=[0, 100])
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Risk warning for recent patterns
+        recent_sequences = []
+        for day_data in sequence_data[-3:]:  # Last 3 days
+            recent_sequences.extend([s[0] for s in day_data['sequences']])
+        
+        high_sequences_last_3days = [s for s in recent_sequences if s >= 3]
+        if high_sequences_last_3days:
+            st.warning(f"⚠️ Alert: {len(high_sequences_last_3days)} high-sequence (3+) bets in last 3 days. Monitor chase levels!")
+        
+        losing_days = len([d for d in sequence_data if d['profit'] < 0])
+        if losing_days >= 4:
+            st.error(f"🔴 CRITICAL: {losing_days} losing days in the last week! Consider pausing or reducing stakes.")
+        elif losing_days >= 2:
+            st.warning(f"⚠️ CAUTION: {losing_days} losing days in the last week. Review strategy.")
+        else:
+            st.success(f"✅ Only {losing_days} losing days in the last week. Strategy is working well!")
     
     def render_risk_metrics(self):
         st.subheader("⚠️ Risk Assessment & Alerts")
@@ -545,7 +630,9 @@ class BettingDashboard:
         with col2:
             self.render_chase_analysis()
         
-        self.render_temporal_patterns()
+        # Replace temporal patterns with sequence win/loss table
+        self.render_sequence_win_loss_table()
+        
         self.render_risk_metrics()
         self.render_detailed_table()
 
