@@ -4,18 +4,13 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "streamlit run dashboard.py --server.port=8080 --server.address=0.0.0.0 & python analytics_service.py && wait",
+    "startCommand": "python process_manager.py",
     "healthcheckPath": "/_stcore/health",
-    "numReplicas": 1
+    "healthcheckTimeout": 100,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "numReplicas": 1,
+    "sleepApplication": false
   },
-  "crons": [
-    {
-      "schedule": "0 9 * * *",
-      "command": "python analytics_service.py"
-    },
-    {
-      "schedule": "0 18 * * *",
-      "command": "python analytics_service.py"
-    }
-  ]
+  "crons": []
 }
