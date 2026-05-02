@@ -231,7 +231,7 @@ def send_daily_report(insights, bets_df, stats):
     if len(full_message) > 4000:
         # Send in parts
         part1 = header + bot_status + sequence_pattern[:2500]
-        part2 = sequence_summary + "\n\n" + ai_section + "\n\n💡 Dashboard: https://betting-analytics.up.railway.app"
+        part2 = sequence_summary + "\n\n" + ai_section + "\n\n💡 Dashboard: https://betting-analysis-agent-production.up.railway.app"
         
         send_telegram_message(part1)
         send_telegram_message(part2)
