@@ -224,8 +224,8 @@ def send_daily_report(insights, bets_df, stats):
         full_message += "\n" + sequence_summary
     
     # Add closing (minimal)
-    full_message += "\n\n─" * 25 + "\n"
-    full_message += "💡 Dashboard: https://betting-analytics.up.railway.app"
+    full_message += "\n" + "─" * 25 + "\n"
+    full_message += "💡 Dashboard: https://betting-analysis-agent-production.up.railway.app""
     
     # Split message if too long (Telegram limit 4096 chars)
     if len(full_message) > 4000:
